@@ -91,6 +91,8 @@
         #toggle-quiz-btn.quiz-active { background-color: #f8d7da; border-color: #f5c6cb; } /* Rosso chiaro per Disattiva */
         #quiz-options { display: none; /* Nascosto di default */ align-items: center; gap: 8px; }
         #quiz-status { font-weight: bold; margin-left: 15px; }
+        /* Stile per il contatore della serie corretta */
+        #quiz-streak-display { font-weight: bold; margin-left: 15px; color: purple; }
         .quiz-note.correct { fill: green !important; stroke: darkgreen !important; } /* Stile nota corretta */
         .quiz-note.incorrect { fill: red !important; stroke: darkred !important; } /* Stile nota errata (opzionale) */
         /* --- Fine Stili Quiz --- */
@@ -120,12 +122,16 @@
     {/* --- NUOVI CONTROLLI QUIZ --- */}
     <div id="quiz-controls">
         <button id="toggle-quiz-btn">Attiva Quiz Scale</button>
-        <div id="quiz-options">
+        {/* MODIFICATO: Aggiunto stile per allineamento e gap */}
+        <div id="quiz-options" style="display: none; align-items: center; gap: 8px;">
             <label for="quiz-style-select">Stile:</label>
             <select id="quiz-style-select">
                 {/* Opzioni verranno aggiunte da JS */}
             </select>
             <span id="quiz-status">Quiz non attivo.</span>
+            {/* === NUOVO ELEMENTO PUNTEGGIO === */}
+            <span id="quiz-streak-display"></span>
+            {/* =============================== */}
         </div>
     </div>
     {/* --- FINE NUOVI CONTROLLI QUIZ --- */}
@@ -556,6 +562,7 @@
     let currentQuizTargetPitchClasses = []; // Note % 12 per confronto
     let currentQuizPlayedNoteIndex = 0; // Indice della prossima nota attesa
     let currentQuizDisplayedElements = []; // Array di { id: svgElementId, element: svgElement } per le note disegnate
+    let quizCorrectStreak = 0; // <-- VARIABILE PUNTEGGIO
     let quizAdvanceTimeout = null; // Per il ritardo prima della prossima scala
 
     // --- Riferimenti Elementi HTML del Quiz ---
@@ -563,6 +570,7 @@
     const quizOptionsDiv = document.getElementById('quiz-options');
     const quizStyleSelect = document.getElementById('quiz-style-select');
     const quizStatusDisplay = document.getElementById('quiz-status');
+    const quizStreakDisplay = document.getElementById('quiz-streak-display'); // <-- RIFERIMENTO PUNTEGGIO
 
     // --- Funzioni Helper Quiz ---
     function midiToNoteNameQuiz(midi_note) {
@@ -574,6 +582,13 @@
 
     function getScaleNotesMidiQuiz(root_midi, intervals) {
         return intervals.map(interval => root_midi + interval);
+    }
+
+    // NUOVA FUNZIONE per aggiornare il display del punteggio
+    function updateStreakDisplay() {
+        if (quizStreakDisplay) { // Controlla che l'elemento esista
+            quizStreakDisplay.textContent = `Serie Corretta: ${quizCorrectStreak}`;
+        }
     }
 
     // --- Funzioni Principali del Quiz ---
@@ -589,28 +604,30 @@
         selectedQuizStyle = quizStyleSelect.value; // Imposta valore iniziale
     }
 
+    // MODIFICATA: Aggiunto reset/update punteggio
     function toggleQuizMode() {
         isQuizModeActive = !isQuizModeActive;
+        quizCorrectStreak = 0; // <-- Resetta sempre quando si cambia modalità
+        updateStreakDisplay(); // <-- Aggiorna display
         if (isQuizModeActive) {
             toggleQuizBtn.textContent = "Disattiva Quiz Scale";
-            toggleQuizBtn.classList.add('quiz-active'); // Usa classe per stile
-            quizOptionsDiv.style.display = 'flex'; // Mostra opzioni quiz
+            toggleQuizBtn.classList.add('quiz-active');
+            quizOptionsDiv.style.display = 'flex';
             console.log("Modalità Quiz ATTIVATA");
-            // Disabilita interazioni editor (opzionale ma consigliato)
+            // Disabilita interazioni editor
             palette.style.pointerEvents = 'none'; palette.style.opacity = '0.5';
             insertRestBtn.disabled = true;
             insertChordBtn.disabled = true;
             deleteLastBtn.disabled = true;
-            skipBassSlotBtn.disabled = true; // Anche se già gestito da activeClef
-            // Rimuovi listener click piano per evitare aggiunte accidentali
+            skipBassSlotBtn.disabled = true;
             pianoKeys.forEach(key => key.removeEventListener('click', handlePianoKeyClick));
 
-            drawInitialStaff(); // Pulisce il pentagramma per il quiz
-            selectNewQuizScale(); // Seleziona la prima scala
+            drawInitialStaff();
+            selectNewQuizScale();
         } else {
             toggleQuizBtn.textContent = "Attiva Quiz Scale";
-            toggleQuizBtn.classList.remove('quiz-active'); // Usa classe per stile
-            quizOptionsDiv.style.display = 'none'; // Nasconde opzioni quiz
+            toggleQuizBtn.classList.remove('quiz-active');
+            quizOptionsDiv.style.display = 'none';
             quizStatusDisplay.textContent = "Quiz non attivo.";
             console.log("Modalità Quiz DISATTIVATA");
             // Riabilita interazioni editor
@@ -618,12 +635,11 @@
             insertRestBtn.disabled = false;
             insertChordBtn.disabled = false;
             deleteLastBtn.disabled = false;
-            updateSkipButtonStatus(); // Riabilita skip se possibile
-            // Riaggiungi listener click piano
+            updateSkipButtonStatus();
             pianoKeys.forEach(key => key.addEventListener('click', handlePianoKeyClick));
 
-            if (quizAdvanceTimeout) clearTimeout(quizAdvanceTimeout); // Cancella timer se presente
-            drawInitialStaff(); // Pulisce il pentagramma
+            if (quizAdvanceTimeout) clearTimeout(quizAdvanceTimeout);
+            drawInitialStaff();
         }
     }
 
@@ -635,6 +651,7 @@
         }
     }
 
+    // MODIFICATA: Aggiunto update punteggio
     function selectNewQuizScale() {
         if (!isQuizModeActive) return;
         if (quizAdvanceTimeout) clearTimeout(quizAdvanceTimeout); // Cancella timer precedente
@@ -677,13 +694,15 @@
         const rootName = midiToNoteNameQuiz(currentQuizRootMidi);
         quizStatusDisplay.textContent = `Suona: ${currentQuizScaleName} (${rootName})`;
         quizStatusDisplay.style.color = 'blue';
+        // Aggiorna anche il display del punteggio (potrebbe essere stato resettato)
+        updateStreakDisplay(); // <-- AGGIUNTO UPDATE PUNTEGGIO
 
         console.log(`Nuova Scala Quiz: ${currentQuizScaleName} su ${rootName}`);
         console.log(`   Note MIDI attese: ${currentQuizTargetMidiNotes}`);
         console.log(`   Pitch Classes attese: ${currentQuizTargetPitchClasses}`);
     }
 
-    // --- FUNZIONE CORRETTA ---
+    // --- FUNZIONE CORRETTA (Usa drawNote) ---
     function drawQuizScaleOnStaff() {
         const startXQuiz = START_X + 20; // Inizia un po' dopo la chiave
         const advanceXQuiz = NOTE_ADVANCE_X * 0.9; // Avvicina un po' le note
@@ -711,7 +730,7 @@
             // 2. Prepara i dati specifici per drawNote
             const noteDetails = midiToNoteDetails(midiNote, preferredAccidental); // Ottieni dettagli, incluso l'accidentale
             const noteData = {
-                value: 'quarter', // Usa 'quarter' per testa piena (o 'half'/'whole' se preferisci testa vuota)
+                value: 'quarter', // Usa 'quarter' per testa piena
                 accidental: noteDetails.accidental // Usa l'accidentale calcolato!
             };
 
@@ -728,8 +747,7 @@
                 if (noteHeadElement) {
                     const noteId = `quiz-note-${index}`; // ID univoco per riferimento
                     noteHeadElement.setAttribute('id', noteId); // Assegna ID alla testa nota
-                    // Aggiungi classe specifica per lo stile quiz alla testa nota
-                    noteHeadElement.classList.add('quiz-note');
+                    noteHeadElement.classList.add('quiz-note'); // Aggiungi classe specifica
                     currentQuizDisplayedElements.push({ id: noteId, element: noteHeadElement });
                 } else {
                     console.warn(`Impossibile trovare .note-head nel gruppo SVG restituito da drawNote per MIDI ${midiNote}`);
@@ -748,7 +766,7 @@
     }
     // --- FINE FUNZIONE CORRETTA ---
 
-
+    // MODIFICATA: Aggiunto incremento/reset punteggio
     function handleMidiMessageForQuiz(midiNoteNumber, velocity) {
         if (!isQuizModeActive || currentQuizPlayedNoteIndex >= currentQuizTargetPitchClasses.length) {
             return; // Quiz non attivo o scala già completata
@@ -769,12 +787,16 @@
 
             // Controlla se la scala è finita
             if (currentQuizPlayedNoteIndex === currentQuizTargetPitchClasses.length) {
+                // === INCREMENTO PUNTEGGIO ===
+                quizCorrectStreak++;
+                updateStreakDisplay();
+                // ==========================
                 quizStatusDisplay.textContent = "Corretto! Caricamento prossima scala...";
                 quizStatusDisplay.style.color = 'green';
-                console.log("Scala Quiz Completata!");
+                console.log("Scala Quiz Completata! Serie:", quizCorrectStreak);
                 // Ritardo prima di caricare la prossima
                 if (quizAdvanceTimeout) clearTimeout(quizAdvanceTimeout);
-                quizAdvanceTimeout = setTimeout(selectNewQuizScale, 1500); // Aspetta 1.5 secondi
+                quizAdvanceTimeout = setTimeout(selectNewQuizScale, 1500);
             } else {
                  // Aggiorna status per indicare la prossima nota
                  const rootName = midiToNoteNameQuiz(currentQuizRootMidi);
@@ -783,14 +805,16 @@
             }
         } else {
             // Nota SBAGLIATA!
+            // === RESET PUNTEGGIO ===
+            quizCorrectStreak = 0;
+            updateStreakDisplay();
+            // =======================
             quizStatusDisplay.textContent = `Sbagliato! Attesa nota ${note_names_quiz[expectedPitchClass]}, suonata ${note_names_quiz[playedPitchClass]}. Riprova.`;
             quizStatusDisplay.style.color = 'red';
-            console.log("Nota Quiz Sbagliata.");
-            // Feedback visivo temporaneo per errore (opzionale)
+            console.log("Nota Quiz Sbagliata. Serie resettata.");
+            // Feedback visivo temporaneo per errore
             updateQuizNoteColor(currentQuizPlayedNoteIndex, false); // Colora di rosso la nota attesa
-            // Resetta il colore dopo un po'
             setTimeout(() => {
-                 // Riporta a nero solo se non è stata ancora suonata correttamente
                  if (currentQuizPlayedNoteIndex < currentQuizTargetPitchClasses.length &&
                      currentQuizTargetPitchClasses[currentQuizPlayedNoteIndex] === expectedPitchClass) {
                      updateQuizNoteColor(currentQuizPlayedNoteIndex, null); // null per nero
@@ -839,7 +863,6 @@
     }
 
     // --- Gestore MIDI per l'EDITOR (Logica Originale) ---
-    // Rinominata da handleMidiMessage a handleMidiMessageEditor per chiarezza
     function handleMidiMessageEditor(event) {
         const command = event.data[0] & 0xf0;
         const note = event.data[1];
@@ -892,6 +915,7 @@
     document.body.addEventListener('click', initAudioContext, { once: true });
     document.body.addEventListener('touchstart', initAudioContext, { once: true });
 
+    updateStreakDisplay(); // <-- AGGIUNTA CHIAMATA INIZIALE PUNTEGGIO
 
 </script>
 
